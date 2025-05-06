@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Image Point Annotator</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; padding-top: 70px; }
+    canvas { border: 1px solid #ccc; cursor: crosshair; display: block; }
+    #controls { position: fixed; top: 0; left: 0; right: 0; background: #fff; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 1000; }
+    #controls button, #controls input, #controls label { margin-right: 10px; font-size: 14px; }
+    #controls label { vertical-align: middle; }
+    #controls input[type="number"], #controls input[type="color"] { vertical-align: middle; }
+    #controls input[type="number"] { width: 60px; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label for="imageLoader">Load image:</label>
+    <input type="file" id="imageLoader" accept="image/*">
+    <label for="fontSize">Font size:</label>
+    <input type="number" id="fontSize" value="20" min="6">
+    <label for="fontColor">Font colour:</label>
+    <input type="color" id="fontColor" value="#ffffff">
+    <label for="jpegQuality">JPEG quality:</label>
+    <input type="number" id="jpegQuality" value="0.92" step="0.01" min="0.1" max="1">
+    <button id="removePointBtn" disabled>Remove Last Point</button>
+    <button id="generateBtn" disabled>Generate Numbers</button>
+    <button id="undoAnnotationBtn" disabled>Undo Last Number</button>
+    <button id="resetNumberingBtn" disabled>Reset Numbering</button>
+    <button id="updateBtn" disabled>Update Annotations</button>
+    <button id="downloadBtn" disabled>Download JPEG</button>
+  </div>
+  <canvas id="imageCanvas"></canvas>
+
+  <script>
+    const imageLoader = document.getElementById('imageLoader');
+    const canvas = document.getElementById('imageCanvas');
+    const ctx = canvas.getContext('2d');
+    const removePointBtn = document.getElementById('removePointBtn');
+    const generateBtn = document.getElementById('generateBtn');
+    const undoAnnotationBtn = document.getElementById('undoAnnotationBtn');
+    const resetNumberingBtn = document.getElementById('resetNumberingBtn');
+    const updateBtn = document.getElementById('updateBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const fontSizeInput = document.getElementById('fontSize');
+    const fontColorInput = document.getElementById('fontColor');
+    const qualityInput = document.getElementById('jpegQuality');
+
+    let img = new Image();
+    let points = [];
+    let annotations = [];
+    let nextLabel = 1; // counter for next annotation sequence
+
+    function updateButtons() {
+      removePointBtn.disabled = points.length === 0;
+      generateBtn.disabled = points.length === 0;
+      undoAnnotationBtn.disabled = annotations.length === 0;
+      resetNumberingBtn.disabled = annotations.length === 0;
+      updateBtn.disabled = annotations.length === 0;
+      downloadBtn.disabled = annotations.length === 0;
+    }
+
+    function drawCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      const size = parseInt(fontSizeInput.value, 10) || 20;
+      ctx.fillStyle = fontColorInput.value;
+      ctx.font = `${size}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      annotations.forEach(a => ctx.fillText(a.label, a.x, a.y));
+      ctx.fillStyle = fontColorInput.value;
+      points.forEach(pt => { ctx.beginPath(); ctx.arc(pt.x, pt.y, 4, 0, Math.PI*2); ctx.fill(); });
+    }
+
+    // Load image
+    imageLoader.addEventListener('change', e => {
+      const file = e.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          points = [];
+          annotations = [];
+          nextLabel = 1;
+          drawCanvas();
+          updateButtons();
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Capture click points
+    canvas.addEventListener('click', e => {
+      if (!img.src) return;
+      const rect = canvas.getBoundingClientRect();
+      points.push({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      drawCanvas();
+      updateButtons();
+    });
+
+    // Remove last point
+    removePointBtn.addEventListener('click', () => {
+      if (points.length) points.pop();
+      drawCanvas();
+      updateButtons();
+    });
+
+    // Generate annotations from points
+    generateBtn.addEventListener('click', () => {
+      points.forEach(pt => {
+        annotations.push({ x: pt.x, y: pt.y, label: nextLabel.toString() });
+        nextLabel++;
+      });
+      points = [];
+      drawCanvas();
+      updateButtons();
+    });
+
+    // Undo last annotation
+    undoAnnotationBtn.addEventListener('click', () => {
+      if (annotations.length) {
+        const last = annotations.pop();
+        nextLabel = parseInt(last.label, 10);
+      }
+      drawCanvas();
+      updateButtons();
+    });
+
+    // Reset numbering for new sequence
+    resetNumberingBtn.addEventListener('click', () => {
+      nextLabel = 1;
+      updateButtons();
+    });
+
+    // Redraw annotations styling
+    updateBtn.addEventListener('click', () => {
+      drawCanvas();
+      updateButtons();
+    });
+
+    // Download annotated image
+    downloadBtn.addEventListener('click', () => {
+      if (!img.src) return;
+      const q = Math.min(Math.max(parseFloat(qualityInput.value), 0.1), 1);
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.style.display = 'none';
+        link.href = url;
+        link.download = 'annotated.jpg';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 'image/jpeg', q);
+    });
+  </script>
+</body>
+</html>
